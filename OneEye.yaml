@@ -1,0 +1,80 @@
+#One Eye with Home Assistant Automation + ESPHome + WLED + RGBIC LEDs
+alias: "mmWave1eye"
+trigger:
+  - platform: state
+    entity_id:
+      - sensor.the_x_axis_sensor
+action:
+  - variables:
+      min_x: -290
+      max_x: 290
+      min_y: 280
+      max_y: 370
+      num_leds: 143
+      reversed: false  # Set to true to reverse the x-axis
+      # Define the range of LED indices where the eye can move
+      eye_min_led: 0        # Start of LEDs
+      eye_max_led: 138      # Number of LEDs
+      color1: "470000"
+      color2: "ff0000"
+      color3: "ff0000" #Red Eye
+      color4: "ff0000"
+      color5: "470000"
+      x: >
+        {% set value_x = states('sensor.the_x_axis_sensor') | float %}
+        {% if value_x < min_x %}
+          {{ min_x }}
+        {% elif value_x > max_x %}
+          {{ max_x }}
+        {% else %}
+          {{ value_x }}
+        {% endif %}
+      y: >
+        {% set value_y = states('sensor.the_y_axis_sensor') | float %}
+        {% if value_y < min_y %}
+          {{ min_y }}
+        {% elif value_y > max_y %}
+          {{ max_y }}
+        {% else %}
+          {{ value_y }}
+        {% endif %}
+      # Normalize x value to a range between 0 and 1 to help with jitter
+      x_normalized: >
+        {% if reversed %}
+          {{ (x - min_x) / (max_x - min_x) }}
+        {% else %}
+          {{ (max_x - x) / (max_x - min_x) }}
+        {% endif %}        
+      # Calculate LED index for the eye
+      led_index: >
+        {{ (eye_min_led + x_normalized * (eye_max_led - eye_min_led)) | int }}
+      brightness: >
+        {% set calc_brightness = ((max_y - y) / (max_y - min_y) * 255) | int %}
+        {% if calc_brightness < 0 %}
+          0
+        {% elif calc_brightness > 255 %}
+          255
+        {% else %}
+          {{ calc_brightness }}
+        {% endif %}       
+      payload: >
+        {
+          "on": true,
+          "bri": {{ brightness }},
+          "transition": 17,
+          "seg": {
+            "i": [
+              0, {{ num_leds }}, "000000",
+              {{ [led_index - 2, 0] | max }}, "{{ color1 }}",
+              {{ [led_index - 1, 0] | max }}, "{{ color2 }}",
+              {{ led_index }}, "{{ color3 }}",
+              {{ led_index + 1 }}, "{{ color4 }}",
+              {{ led_index + 2 }}, "{{ color5 }}"
+            ]
+          }
+        }
+  - data:
+      payload: "{{ payload }}"
+    service: rest_command.update_wled_led
+mode: parallel
+max: 10
