@@ -1,0 +1,8 @@
+#Add this to your configuration.yaml to nest a rest command Home Assistant can use in an automation
+rest_command:
+  update_wled_led:
+    url: "http://192.168.1.69/json/state" #change IP to your WLED device
+    method: POST
+    headers:
+      content-type: "application/json"
+    payload: "{{ payload }}"
