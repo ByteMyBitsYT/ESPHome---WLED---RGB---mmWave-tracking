@@ -1,0 +1,89 @@
+#two eyes with Home Assistant Automation + ESPHome + WLED + RGBIC LEDs
+alias: "mmWave 2Eyes"
+trigger:
+  - platform: state
+    entity_id:
+      - sensor.the_x_axis_sensor
+action:
+  - variables:
+      min_x: -290
+      max_x: 290
+      min_y: 320
+      max_y: 500
+      num_leds: 143
+      reversed: false  # Set to true to reverse the x-axis
+      # Eye positions on the LED strip
+      left_eye_min_led: 18    # LED index when looking left
+      left_eye_max_led: 73    # LED index when looking right
+      right_eye_min_led: 69   # LED index when looking left
+      right_eye_max_led: 114  # LED index when looking right
+      color1: "470000"
+      color2: "ff0000"
+      color3: "ff0000" # Red eyes for demo
+      color4: "ff0000"
+      color5: "470000"
+      x: >
+        {% set value_x = states('sensor.the_x_axis_sensor') | float %}
+        {% if value_x < min_x %}
+          {{ min_x }}
+        {% elif value_x > max_x %}
+          {{ max_x }}
+        {% else %}
+          {{ value_x }}
+        {% endif %}
+      y: >
+        {% set value_y = states('sensor.the_y_axis_sensor') | float %}
+        {% if value_y < min_y %}
+          {{ min_y }}
+        {% elif value_y > max_y %}
+          {{ max_y }}
+        {% else %}
+          {{ value_y }}
+        {% endif %}
+      # Normalize x value to a range between 0 and 1
+      x_normalized: >
+        {% if reversed %}
+          {{ (x - min_x) / (max_x - min_x) }}
+        {% else %}
+          {{ (max_x - x) / (max_x - min_x) }}
+        {% endif %}  
+      # Calculate LED indices for left and right eyes
+      led_index_left: >
+        {{ (left_eye_min_led + x_normalized * (left_eye_max_led - left_eye_min_led)) | int }}
+      led_index_right: >
+        {{ (right_eye_min_led + x_normalized * (right_eye_max_led - right_eye_min_led)) | int }}
+      brightness: >
+        {% set calc_brightness = ((max_y - y) / (max_y - min_y) * 255) | int %}
+        {% if calc_brightness < 0 %}
+          0
+        {% elif calc_brightness > 255 %}
+          255
+        {% else %}
+          {{ calc_brightness }}
+        {% endif %}       
+      payload: >
+        {
+          "on": true,
+          "bri": {{ brightness }},
+          "transition": 17,
+          "seg": {
+            "i": [
+              0, {{ num_leds }}, "000000",
+              {{ [led_index_left - 2, 0] | max }}, "{{ color1 }}",
+              {{ [led_index_left - 1, 0] | max }}, "{{ color2 }}",
+              {{ led_index_left }}, "{{ color3 }}",
+              {{ led_index_left + 1 }}, "{{ color4 }}",
+              {{ led_index_left + 2 }}, "{{ color5 }}",
+              {{ [led_index_right - 2, 0] | max }}, "{{ color1 }}",
+              {{ [led_index_right - 1, 0] | max }}, "{{ color2 }}",
+              {{ led_index_right }}, "{{ color3 }}",
+              {{ led_index_right + 1 }}, "{{ color4 }}",
+              {{ led_index_right + 2 }}, "{{ color5 }}"
+            ]
+          }
+        }
+  - data:
+      payload: "{{ payload }}"
+    service: rest_command.update_wled_led
+mode: parallel
+max: 10
